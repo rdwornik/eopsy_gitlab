@@ -5,16 +5,11 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <sys/ipc.h>
-#include <signal.h>
+#include <pthread.h>
 #include <string.h>
 #include <sys/sem.h>
 #include <sys/shm.h>
 #include <semaphore.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/mman.h>
-#include <string.h>
-#include <unistd.h>
 
 // semaphore sv = 1;
 // loop forever {
@@ -36,13 +31,13 @@
 
 #define MUTEX 92479479
 
-static int state[N]; //current state of the philosopher
+int state[N]; //current state of the philosopher
 
-int mutex;
-int sem_id;
+static int mutex;
+static int sem_id;
 
 //id numbers of philosphers
-//static int phil[N] = {0, 1, 2, 3, 4};
+int phil[N] = {0, 1, 2, 3, 4};
 void eat(int philosopher_id);
 void think(int philosopher_id);
 void hungry(int philosopher_id);
@@ -51,7 +46,7 @@ static int semaphore_p(int sem_id,int left);
 static void del_semvalue(int sem_id,int sem_num);
 static int set_semvalue(int sem_id, int sem_num);
 
-void philosopher(int num);
+void* philosopher(void* num);
 void put_away_forks( int left_fork_id );
 void grab_forks(int left_fork_id);
 void test(int left_fork_id);
@@ -62,109 +57,54 @@ struct semid_ds *buf;
 unsigned short *array;
 };
 
-struct shared_data{
-  int mutex;
-  int sem_id;
-  int state[N];
-};
-
-
-void* create_shared_memory(size_t size){
-    int protection = PROT_READ | PROT_WRITE;
-    int visibility = MAP_ANONYMOUS | MAP_SHARED;
-
-return mmap(NULL,size,protection,visibility, -1,0);
-}
-
-struct shared_data* shmem;
-
 int main(){
 
-struct shared_data shared;
+    //create mutex semaphore
+   mutex = semget((key_t)123456, 1, 0666 | IPC_CREAT);
 
-
-pid_t pids[N];      
-printf("fork program\n");
-
-//create mutex semaphore
-shared.mutex = semget((key_t)12345676, 1, 0666 | IPC_CREAT);
-printf("mutex id is: %d \n", shared.mutex);
+   printf("mutex id is: %d \n", mutex);
+   pthread_t thread_id[N];
    
-int i;
-//check if everything was created correctly
-if (!set_semvalue(shared.mutex, 0)) {
-    fprintf(stderr, "Failed to initialize semaphore\n");
-    exit(EXIT_FAILURE);
-}
-
-
-//create five semaphores each represents one fork
-shared.sem_id = semget((key_t)123467, 5, 0666 | IPC_CREAT);
-printf("sem id is: %d \n", shared.sem_id);
-
-
-//check each semaphore if was created correctly
-/*The function set_semvalue initializes the semaphore using the SETVAL command in a semctl
-call. You need to do this before you can use the semaphore */
-
-for (i = 0; i < N; i++) {
-    if (!set_semvalue(shared.sem_id, i)) {
+   int i;
+   //check if everything was created correctly
+   if (!set_semvalue(mutex, 0)) {
         fprintf(stderr, "Failed to initialize semaphore\n");
         exit(EXIT_FAILURE);
+   }
+   //create five semaphores each represents one fork
+    sem_id = semget((key_t)123467, 5, 0666 | IPC_CREAT);
+
+    printf("sem id is: %d \n", sem_id);
+    
+    //check each semaphore if was created correctly
+    /*The function set_semvalue initializes the semaphore using the SETVAL command in a semctl
+    call. You need to do this before you can use the semaphore */
+    for (i = 0; i < N; i++) {
+        if (!set_semvalue(sem_id, i)) {
+            fprintf(stderr, "Failed to initialize semaphore\n");
+            exit(EXIT_FAILURE);
     }
-}
+   }
 
-
-
-shmem = create_shared_memory(128);
-memcpy(shmem, &shared,sizeof(shared));
-
-
-// create 5 processes each represents one semaphore
-for (i = 0; i < N; i++){
-    pids[i] = fork();     
-    switch(pids[i])        
-        {
-            case -1:            
-                perror("fork failed\n");    
-                kill(-2, SIGTERM);   
-                exit(EXIT_FAILURE);
-            case 0:
-            //printf("mutex id: %d sem_id: %d number i:%d \n", shmem->mutex, shmem->sem_id, i);
-                philosopher(i);
-            
-                exit(0);
-        }
-}
-
-int stat_val;
-pid_t child_pid;   
-int n = N;
-while(n > 0 ){      
-        child_pid = wait(&stat_val);                                    
-        printf("Child[%d] After waiting, child has finishied\n", child_pid);
-
-        if(WIFEXITED(stat_val))   //stat_val is nonzero if the child is terminated normally
-            printf("child exited with code %d\n", WEXITSTATUS(stat_val));
-        else
-        {
-            printf("Child terminated abnormally\n"); //inform user child terminated ABNORMALLY
-        }
-        n--;
+    // create 5 threads each represents one semaphore
+   for (i = 0; i < N; i++) {
+        pthread_create(&thread_id[i], NULL,
+                       philosopher, &phil[i]);
     }
 
-/*The del_semvalue function has almost the same form as set_semvalue, except that the call to semctl uses the
-command IPC_RMID to remove the semaphore’s ID */
+    //wait for all threads to end
+    for (i = 0; i < N; i++)
+        pthread_join(thread_id[i], NULL);
 
-printf("before deleting mutex id: %d sem_id: %d \n", shmem->mutex, shmem->sem_id);
+    /*The del_semvalue function has almost the same form as set_semvalue, except that the call to semctl uses the
+    command IPC_RMID to remove the semaphore’s ID */
+    for (i = 0; i < N; i++)
+        del_semvalue(sem_id, i);
 
-for (i = 0; i < N; i++)
-    del_semvalue(shmem->sem_id, i);
+    del_semvalue(mutex,0);
 
-del_semvalue(shmem->mutex,0);
-
-//end of main
 }
+
 
 //checks if current philospher is hungry and neighbours are not eating
 //if conditions met it stur 
@@ -172,21 +112,16 @@ del_semvalue(shmem->mutex,0);
 void test(int left_fork_id) {
     int philosopher_id = left_fork_id;
 
-    // if (state[left_fork_id] == HUNGRY &&
-    //     state[LEFT] != EATING &&
-    //     state[RIGHT] != EATING)
-    if (shmem->state[left_fork_id] == HUNGRY &&
-        shmem->state[LEFT] != EATING &&
-        shmem->state[RIGHT] != EATING)
+    if (state[left_fork_id] == HUNGRY &&
+        state[LEFT] != EATING &&
+        state[RIGHT] != EATING)
         {
-            //state[left_fork_id] = EATING;
-            shmem->state[left_fork_id] = EATING;
-            
+            state[left_fork_id] = EATING;
             printf("Phlisopher: %d is takes fork %d and %d \n", philosopher_id , LEFT, RIGHT);
             // V() (up) signal has no effect during grab_forks(), 
             // but is important to wake up waiting 
             // hungry philosophers during put_away_forks() 
-            if (!semaphore_v(shmem->sem_id,left_fork_id)) exit(EXIT_FAILURE);
+            if (!semaphore_v(sem_id,left_fork_id)) exit(EXIT_FAILURE);
 
         }
 }
@@ -194,40 +129,38 @@ void test(int left_fork_id) {
 void put_away_forks( int left_fork_id ) {
     int philosopher_id = left_fork_id;
 //we use semaphore_p(mutex,MUTEX)) when we want to change current state of philospher since this shared buffered between threads
-    if (!semaphore_p(shmem->mutex,MUTEX)) exit(EXIT_FAILURE);
-    shmem->state[philosopher_id] = HUNGRY;
-    //state[philosopher_id] = THINKING;
+    if (!semaphore_p(mutex,MUTEX)) exit(EXIT_FAILURE);
+    state[philosopher_id] = THINKING;
     test(LEFT); //signal left and right philosphers that he finisished eating
     test(RIGHT);
-    if (!semaphore_v(shmem->mutex,MUTEX)) exit(EXIT_FAILURE);
+    if (!semaphore_v(mutex,MUTEX)) exit(EXIT_FAILURE);
 
 }
 
 void grab_forks(int left_fork_id) {
     int philosopher_id = left_fork_id;
 
-    if (!semaphore_p(shmem->mutex,MUTEX)) exit(EXIT_FAILURE);
+    if (!semaphore_p(mutex,MUTEX)) exit(EXIT_FAILURE);
 
-    //state[philosopher_id] = HUNGRY;
-    shmem->state[philosopher_id] = HUNGRY;
-    
+    state[philosopher_id] = HUNGRY;
     hungry(philosopher_id);
     test(philosopher_id); //test if neighbours are not eating
 
-    if (!semaphore_v(shmem->mutex,MUTEX)) exit(EXIT_FAILURE);
+    if (!semaphore_v(mutex,MUTEX)) exit(EXIT_FAILURE);
 //we use (!semaphore_p(sem_id,left_fork_id))to block access to fork semaphor which in other words signals neigbhor is if he is free to use fork     
-    if (!semaphore_p(shmem->sem_id,left_fork_id)) exit(EXIT_FAILURE);
+    if (!semaphore_p(sem_id,left_fork_id)) exit(EXIT_FAILURE);
 
     sleep(1);
 }
 
 //function reperenst philospher life cycle excecuted by thread when it is created
-void philosopher(int num) {
+void* philosopher(void* num) {
     while (1) {
-        think(num);
-        grab_forks(num);
-        eat(num);
-        put_away_forks(num);
+        int* i = num;
+        think(*i);
+        grab_forks(*i);
+        eat(*i);
+        put_away_forks(*i);
     }
 }
 
@@ -350,6 +283,7 @@ IPC_RMID : Used for deleting a semaphore identifier when it’s no longer requir
 
 
 */
+
 static int set_semvalue(int semid,int sem_num)
 {
     union semun sem_union;
@@ -362,5 +296,5 @@ static void del_semvalue(int semid,int sem_num)
 {
     union semun sem_union;
     if (semctl(semid, sem_num, IPC_RMID, sem_union) == -1)
-        fprintf(stderr, "Failed to delete semaphore number: %d sem_num: %d\n", semid, sem_num);
+        fprintf(stderr, "Failed to delete semaphore\n");
 }
