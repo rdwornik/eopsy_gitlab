@@ -1,0 +1,10 @@
+The diffrence in algorithms are that with semaphores problem by using ability of blocking two forks in the same time the process can block other two processes at once which so omit the deadlock problem
+that one process could grab one fork and could grab second one. We initilize semaphores to one so that first process can pass but second one which will try to grab forks will be blocked until
+the first process will not unblock the forks. 
+
+In seventh problem we can't block two processes in one moment so we have to make the communications beetwen threads. We initlize 5 mutexes wich represents philosphers try to eat to zero so that if
+they cant't eat they are freezed until the second. It is whe we set each five mutex representig philsopher to zero so the first one will be let it in and the rest will wait until the eating one will
+not put mutex up. We also put mutex up and the end of eating so we will not freezed after finishing eating.
+
+
+This algorithm is beteer since in previous two phiospher where eating and 3 where waiting
