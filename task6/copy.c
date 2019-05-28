@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <malloc.h>
+#include<string.h>
 
 #define EXIT_FAILURE 1
 #define EXIT_SUCCESS 0
@@ -75,17 +76,17 @@ int main(int argc, char** argv){
        arg2 = argv[++optind];
        printf("arg1: %s arg2: %s \n", arg1,arg2);
 
-        if((fd = open(arg1, O_RDONLY)) == -1){
+        if((fd = open(arg1, O_RDONLY,S_IRUSR | S_IWUSR)) == -1){
                     perror("no such a input file\n");
                     exit(EXIT_FAILURE);
                 }
-                
-        if((fo = open(arg2, O_WRONLY)) == -1){
+
+        if((fo = open("dest", O_RDWR | O_CREAT,0666)) == -1){
             perror("no such a output file\n");
             exit(EXIT_FAILURE);
         }
 
-       // using_mmap(argv[(int)arg1],argv[(int)arg2]);
+       using_mmap(fd,fo);
     }  
 }
 
@@ -94,7 +95,31 @@ void help(){
 }
 
 void using_mmap(int fd_from, int fd_to){
+    struct stat sb;
+    if(fstat(fd_from,&sb) == -1){
+        perror("can't get file size \n");
+        exit(EXIT_FAILURE);
+    }
 
+
+
+    printf("file size is %ld\n", sb.st_size);
+
+  char *input = mmap(NULL,sb.st_size,PROT_READ | PROT_WRITE, MAP_PRIVATE, fd_from,0);
+ 
+
+ 
+  char *out = mmap(NULL,sb.st_size,PROT_READ | PROT_WRITE, MAP_SHARED, fd_to,0);
+ 
+  for(int i = 0; i < sb.st_size; i++)
+  printf("%c",input[i]);
+//   printf("\n");
+   memcpy(out,input,sb.st_size);
+
+   if((close(fd_from)) == -1 || close(fd_to) == -1){
+            perror("error on closing occured\n");
+            exit(EXIT_FAILURE);
+        }
 }
 
 
