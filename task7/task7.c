@@ -3,7 +3,7 @@
 #include<stdlib.h>
 #include<unistd.h>
 #define N	5
-#define LEFT	( i + N - 1 ) % N
+#define LEFT	( i + N ) % N
 #define RIGHT	( i + 1 ) % N
 
 #define THINKING 0
@@ -29,6 +29,7 @@ int	state[N];	    //initiated to THINKING's
 pthread_mutex_t s[N];	//initialized to 0's
 int phil[N] = {0,1,2,3,4};
 
+//Odpowiedź na pytanie zawarte w poleceniu znajduje się w pliku opis_do_lab7.txt
 
 int main(){
     int res;
@@ -62,6 +63,7 @@ int main(){
     
 }
 
+//philoshpers function represents the action made by philosophers
 void* philosphers(void *num)
 {
     while(1){
@@ -76,23 +78,40 @@ void* philosphers(void *num)
 
 void grab_forks( int i )
 {
+    //we lock down mutex to eneter creatical section where we access resource shared by all threads
+    //in this case this state[i] array
+    //enter critical section
 	down( &m );
 		state[i] = HUNGRY;
         hungry(i);
+    //when we grab_forks the test function is checking if we can start to eat 
 		test( i );
+    //leaving critical section
 	up( &m );
+    //if we could not eat since forks were taken we are freezed here since we put all mutexes to zero we wait until somebody
+    //will not wake us up if we were able to eat we just continue 
 	down( &s[i] );
 }
 
 void put_away_forks( int i )
 {
+    //enter crtitcal section since we are changing states
 	down( &m );
 		state[i] = THINKING;
+    //here we inform philosphers on our left and right that we stopped eating and we let them eat by puttinh the semaphor up
+    //they are not freezed anymore if they were freezed in function grab forks
+    //we do is in critical section since
+    //in test function we are checking and changing the state
 		test( LEFT );
 		test( RIGHT );
 	up( &m );
 }
-
+/*this function has two contexts:
+1) if we check if ourselves if we can eat if yes we put semaphore up to not be blocked in end of the grab_forks function
+and change our state to eating
+2) the other contex is when we want to inform philosphers beside us that they can eat by change there state to eating and
+puting mutex up so they are not freezed in grab forks anymore
+*/
 void test( int i )
 {
 	if( state[i] == HUNGRY

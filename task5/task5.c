@@ -174,7 +174,8 @@ static int semaphore_p(int semid, int left_fork_id)
             fprintf(stderr, "semaphore_p failed lock forks sem id: %d \n", semid);
             return(0);
             }
-            printf("Phlisopher: %d is takes fork %d and %d \n", left_fork_id , LEFT, RIGHT);    
+            printf("Phlisopher: %d is takes fork %d and %d \n", left_fork_id , (LEFT 
+            + 1)%5, RIGHT);    
             return(1);         
 }
 
