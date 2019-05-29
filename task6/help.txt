@@ -1,0 +1,6 @@
+copy [-m] <file_name> <new_file_name>
+  copy [-h]
+  
+Without option -m use read() and write() functions to copy file contents. If
+the option -m is given, do not use neither read() nor write() but map files
+to memory regions with mmap() and copy the file with memcpy() instead.
